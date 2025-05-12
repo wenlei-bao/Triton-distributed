@@ -1,0 +1,142 @@
+################################################################################
+#
+# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files
+# (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge,
+# publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+################################################################################
+import sys
+from typing import Sequence
+
+import torch
+import torch.distributed
+
+try:
+    from triton._C._pynvshmem import *  # noqa: F403
+except Exception as e:
+    print(
+        "please add NVSHMEM library path to LD_LIBRARY_PATH and try again",
+        flush=True,
+        file=sys.stderr,
+    )
+    raise e
+
+# team node
+NVSHMEM_TEAM_INVALID = -1
+NVSHMEM_TEAM_WORLD = 0
+NVSHMEM_TEAM_WORLD_INDEX = 0
+NVSHMEM_TEAM_SHARED = 1
+NVSHMEM_TEAM_SHARED_INDEX = 1
+NVSHMEMX_TEAM_NODE = 2
+NVSHMEM_TEAM_NODE_INDEX = 2
+NVSHMEMX_TEAM_SAME_MYPE_NODE = 3
+NVSHMEM_TEAM_SAME_MYPE_NODE_INDEX = 3
+NVSHMEMI_TEAM_SAME_GPU = 4
+NVSHMEM_TEAM_SAME_GPU_INDEX = 4
+NVSHMEMI_TEAM_GPU_LEADERS = 5
+NVSHMEM_TEAM_GPU_LEADERS_INDEX = 5
+NVSHMEM_TEAMS_MIN = 6
+NVSHMEM_TEAM_INDEX_MAX = sys.maxsize
+
+# class nvshmemi_cmp_type(Enum):
+NVSHMEM_CMP_EQ = 0
+NVSHMEM_CMP_NE = 1
+NVSHMEM_CMP_GT = 2
+NVSHMEM_CMP_LE = 3
+NVSHMEM_CMP_LT = 4
+NVSHMEM_CMP_GE = 5
+NVSHMEM_CMP_SENTINEL = sys.maxsize
+
+# class nvshmemi_amo_t(Enum):
+NVSHMEMI_AMO_ACK = 1
+NVSHMEMI_AMO_INC = 2
+NVSHMEMI_AMO_SET = 3
+NVSHMEMI_AMO_ADD = 4
+NVSHMEMI_AMO_AND = 5
+NVSHMEMI_AMO_OR = 6
+NVSHMEMI_AMO_XOR = 7
+NVSHMEMI_AMO_SIGNAL = 8
+NVSHMEM_SIGNAL_SET = 9
+NVSHMEM_SIGNAL_ADD = 10
+NVSHMEMI_AMO_SIGNAL_SET = NVSHMEM_SIGNAL_SET  # Note - NVSHMEM_SIGNAL_SET == 9
+NVSHMEMI_AMO_SIGNAL_ADD = NVSHMEM_SIGNAL_ADD  # Note - NVSHMEM_SIGNAL_ADD == 10
+NVSHMEMI_AMO_END_OF_NONFETCH = 11  # end of nonfetch atomics
+NVSHMEMI_AMO_FETCH = 12
+NVSHMEMI_AMO_FETCH_INC = 13
+NVSHMEMI_AMO_FETCH_ADD = 14
+NVSHMEMI_AMO_FETCH_AND = 15
+NVSHMEMI_AMO_FETCH_OR = 16
+NVSHMEMI_AMO_FETCH_XOR = 17
+NVSHMEMI_AMO_SWAP = 18
+NVSHMEMI_AMO_COMPARE_SWAP = 19
+NVSHMEMI_AMO_OP_SENTINEL = sys.maxsize
+
+
+def nvshmem_create_tensor(shape: Sequence[int], dtype: torch.dtype) -> torch.Tensor:
+    nbytes = torch.Size(shape).numel() * dtype.itemsize
+    torch.cuda.synchronize()
+    buffer = symm_cuda_buffer(nbytes)  # noqa: F405
+    return torch.as_tensor(buffer, device="cuda").view(dtype).view(shape)
+
+
+def nvshmem_create_tensor_list_intra_node(shape: Sequence[int], dtype: torch.dtype) -> torch.Tensor:
+    nbytes = torch.Size(shape).numel() * dtype.itemsize
+    torch.cuda.synchronize()
+    buffer = symm_cuda_buffer(nbytes)  # noqa: F405
+    local_world_size = nvshmem_team_n_pes(NVSHMEMX_TEAM_NODE)  # noqa: F405
+    local_rank = nvshmem_team_my_pe(NVSHMEMX_TEAM_NODE)  # noqa: F405
+    rank = nvshmem_my_pe()  # noqa: F405
+    rank_offset = rank - local_rank
+
+    def _as_tensor(i):
+        i += rank_offset
+        if i == rank:
+            return torch.as_tensor(buffer, device="cuda").view(dtype).view(shape)
+        else:
+            return torch.as_tensor(buffer.symm_at(i), device="cuda").view(dtype).view(shape)
+
+    return [_as_tensor(i) for i in range(local_world_size)]
+
+
+def broadcast_cpu(tensor: torch.Tensor, src: int, group: torch.distributed.ProcessGroup):
+    if not tensor.is_cuda:
+        tensor_gpu = tensor.cuda()
+        torch.distributed.broadcast(tensor_gpu, src=src, group=group)
+        tensor.copy_(tensor_gpu)
+    else:
+        torch.distributed.broadcast(tensor, src=src, group=group)
+    torch.cuda.synchronize()
+
+
+def init_nvshmem_by_uniqueid(group: torch.distributed.ProcessGroup):
+    rank, nranks = group.rank(), group.size()
+    if rank == 0:
+        unique_id: bytes = bytearray(nvshmemx_get_uniqueid())  # noqa: F405
+        unique_id = torch.frombuffer(unique_id, dtype=torch.uint8).cpu().clone()
+    else:
+        # the default device("cpu") may be modified by set_default_device
+        unique_id = torch.empty(128, dtype=torch.uint8, device="cpu")
+
+    broadcast_cpu(tensor=unique_id, group=group, src=0)
+
+    unique_id = unique_id.cpu().numpy().tobytes()
+    nvshmemx_init_attr_with_uniqueid(rank, nranks, unique_id)  # noqa: F405
+    nvshmem_barrier_all()  # noqa: F405
+    torch.cuda.synchronize()

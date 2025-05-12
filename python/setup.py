@@ -19,8 +19,7 @@ from distutils.command.clean import clean
 from pathlib import Path
 from typing import List, Optional
 
-from setuptools import Extension, setup
-from setuptools.command.build_ext import build_ext
+from setuptools import Extension, setup, Command
 from setuptools.command.build_py import build_py
 from dataclasses import dataclass
 
@@ -31,7 +30,11 @@ from wheel.bdist_wheel import bdist_wheel
 
 import pybind11
 
-from build_helpers import get_base_dir, get_cmake_dir
+from build_helpers import get_base_dir, get_cmake_dir, copy_apply_patches
+
+from torch.utils.cpp_extension import BuildExtension as TorchBuildExtension
+
+copy_apply_patches()
 
 
 @dataclass
@@ -54,7 +57,7 @@ class BackendInstaller:
     def prepare(backend_name: str, backend_src_dir: str = None, is_external: bool = False):
         # Initialize submodule if there is one for in-tree backends.
         if not is_external:
-            root_dir = os.path.join(os.pardir, "third_party")
+            root_dir = os.path.join(get_base_dir(), "3rdparty", "triton", "third_party")
             assert backend_name in os.listdir(
                 root_dir), f"{backend_name} is requested for install but not present in {root_dir}"
 
@@ -82,7 +85,8 @@ class BackendInstaller:
         for file in ["compiler.py", "driver.py"]:
             assert os.path.exists(os.path.join(backend_path, file)), f"${file} does not exist in ${backend_path}"
 
-        install_dir = os.path.join(os.path.dirname(__file__), "triton", "backends", backend_name)
+        install_dir = os.path.join(os.path.dirname(__file__), os.pardir, "3rdparty", "triton", "python", "triton",
+                                   "backends", backend_name)
         package_data = [f"{os.path.relpath(p, backend_path)}/*" for p, _, _, in os.walk(backend_path)]
 
         language_package_data = []
@@ -230,7 +234,7 @@ def get_llvm_package_info():
         return Package("llvm", "LLVM-C.lib", "", "LLVM_INCLUDE_DIRS", "LLVM_LIBRARY_DIR", "LLVM_SYSPATH")
     # use_assert_enabled_llvm = check_env_flag("TRITON_USE_ASSERT_ENABLED_LLVM", "False")
     # release_suffix = "assert" if use_assert_enabled_llvm else "release"
-    llvm_hash_path = os.path.join(get_base_dir(), "cmake", "llvm-hash.txt")
+    llvm_hash_path = os.path.join(get_base_dir(), "3rdparty", "triton", "cmake", "llvm-hash.txt")
     with open(llvm_hash_path, "r") as llvm_hash_file:
         rev = llvm_hash_file.read(8)
     name = f"llvm-{rev}-{system_suffix}"
@@ -334,7 +338,8 @@ def download_and_copy(name, src_func, dst_path, variable, version, url_func):
     url = url_func(supported[system], arch, version)
     src_path = src_func(supported[system], arch, version)
     tmp_path = os.path.join(triton_cache_path, "nvidia", name)  # path to cache the download
-    dst_path = os.path.join(base_dir, os.pardir, "third_party", "nvidia", "backend", dst_path)  # final binary path
+    dst_path = os.path.join(base_dir, os.pardir, "3rdparty", "triton", "third_party", "nvidia", "backend",
+                            dst_path)  # final binary path
     src_path = os.path.join(tmp_path, src_path)
     download = not os.path.exists(src_path)
     if os.path.exists(dst_path) and system == "Linux" and shutil.which(dst_path) is not None:
@@ -342,6 +347,28 @@ def download_and_copy(name, src_func, dst_path, variable, version, url_func):
         curr_version = re.search(r"V([.|\d]+)", curr_version)
         assert curr_version is not None, f"No version information for {dst_path}"
         download = download or curr_version.group(1) != version
+    if download:
+        print(f'downloading and extracting {url} ...')
+        file = tarfile.open(fileobj=open_url(url), mode="r|*")
+        file.extractall(path=tmp_path)
+    os.makedirs(os.path.split(dst_path)[0], exist_ok=True)
+    print(f'copy {src_path} to {dst_path} ...')
+    if os.path.isdir(src_path):
+        shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+    else:
+        shutil.copy(src_path, dst_path)
+
+
+def download_nvshmem():
+    version = "3.2.5-1"
+    url = f"https://developer.nvidia.com/downloads/assets/secure/nvshmem/nvshmem_src_{version}.txz"
+    base_dir = os.path.dirname(__file__)
+    triton_cache_path = get_triton_cache_path()
+    tmp_path = os.path.join(triton_cache_path, "nvshmem")  # path to cache the download
+    src_path = "nvshmem_src"
+    src_path = os.path.join(tmp_path, src_path)
+    dst_path = os.path.join(base_dir, os.pardir, "3rdparty", "triton", "third_party", "nvshmem")
+    download = not os.path.exists(src_path)
     if download:
         print(f'downloading and extracting {url} ...')
         file = tarfile.open(fileobj=open_url(url), mode="r|*")
@@ -379,62 +406,85 @@ class CMakeExtension(Extension):
         self.path = path
 
 
-class CMakeBuild(build_ext):
+def build_nvshmem(cap):
+    nvshmem_bind_dir = os.path.join(get_base_dir(), "shmem", "nvshmem_bind")
+    nvshmem_dir = os.path.join(get_base_dir(), "3rdparty", "nvshmem")
+    if not os.path.exists(nvshmem_dir) or len(os.listdir(nvshmem_dir)) == 0:
+        # for github version: download_nvshmem()
+        # subprocess.check_call(["git", "submodule", "update", "--init", "--recursive"])
+        raise RuntimeError("NVSHMEM is empty. Please refer to README for NVSHMEM install")
+    if not os.path.exists(nvshmem_bind_dir):
+        raise RuntimeError("NVSHMEM bind source directory not found")
 
-    user_options = build_ext.user_options + \
+    CUDA_ARCH = "".join([str(x) for x in cap])
+    extra_args = ["--arch", CUDA_ARCH] if CUDA_ARCH != "" else []
+    subprocess.check_call(["bash", f"{nvshmem_bind_dir}/build.sh"] + extra_args)
+
+
+def build_rocshmem(cap):
+    rocshmem_bind_dir = os.path.join(get_base_dir(), "shmem", "rocshmem_bind")
+    rocshmem_dir = os.path.join(get_base_dir(), "3rdparty", "rocshmem")
+    if not os.path.exists(rocshmem_dir) or len(os.listdir(rocshmem_dir)) == 0:
+        # subprocess.check_call(["git", "submodule", "update", "--init", "--recursive"])
+        raise RuntimeError("ROCSHMEM is empty. Please `git submodule update --init --recursive`")
+    if not os.path.exists(rocshmem_bind_dir):
+        raise RuntimeError("ROCSHMEM bind source directory not found")
+
+    ROCM_ARCH = "gfx942"  # hard-code for now
+    extra_args = ["--arch", ROCM_ARCH] if ROCM_ARCH != "" else []
+    subprocess.check_call(["bash", f"{rocshmem_bind_dir}/build.sh"] + extra_args)
+
+
+def build_shmem():
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            if torch.version.hip is None:
+                build_nvshmem(torch.cuda.get_device_capability())
+            else:
+                build_rocshmem(torch.cuda.get_device_capability())  # (9, 4)
+    except Exception as e:
+        print("Cannot import torch.")
+        raise e
+
+
+class SHMEMBuildOnly(Command):
+    description = "Helper for SHMEM build only"
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        build_shmem()
+
+
+class CMakeBuild(TorchBuildExtension):
+
+    user_options = TorchBuildExtension.user_options + \
         [('base-dir=', None, 'base directory of Triton')]
 
     def initialize_options(self):
-        build_ext.initialize_options(self)
+        TorchBuildExtension.initialize_options(self)
         self.base_dir = get_base_dir()
 
     def finalize_options(self):
-        build_ext.finalize_options(self)
-
-    def build_nvshmem(self, cap):
-        nvshmem_dir = os.path.join(get_base_dir(), "third_party", "nvshmem_bind")
-        if not os.path.exists(nvshmem_dir):
-            raise RuntimeError("NVSHMEM source directory not found")
-
-        CUDA_ARCH = "".join([str(x) for x in cap])
-        extra_args = ["--arch", CUDA_ARCH] if CUDA_ARCH != "" else []
-        subprocess.check_call(["bash", f"{nvshmem_dir}/build.sh"] + extra_args)
-
-    def build_rocshmem(self, cap):
-        rocshmem_dir = os.path.join(get_base_dir(), "third_party", "rocshmem_bind")
-        if not os.path.exists(rocshmem_dir):
-            raise RuntimeError("ROCSHMEM source directory not found")
-
-        ROCM_ARCH = "gfx942"  # hard-code for now
-        extra_args = ["--arch", ROCM_ARCH] if ROCM_ARCH != "" else []
-        subprocess.check_call(["bash", f"{rocshmem_dir}/build.sh"] + extra_args)
+        TorchBuildExtension.finalize_options(self)
 
     def run(self):
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                if torch.version.hip is None:
-                    self.build_nvshmem(torch.cuda.get_device_capability())
-                else:
-                    self.build_rocshmem(torch.cuda.get_device_capability())  # (9, 4)
-        except Exception:
-            print("Cannot import torch.")
-            pass
-
-        try:
-            out = subprocess.check_output(["cmake", "--version"])
-        except OSError:
-            raise RuntimeError("CMake must be installed to build the following extensions: " +
-                               ", ".join(e.name for e in self.extensions))
-
-        match = re.search(r"version\s*(?P<major>\d+)\.(?P<minor>\d+)([\d.]+)?", out.decode())
-        cmake_major, cmake_minor = int(match.group("major")), int(match.group("minor"))
-        if (cmake_major, cmake_minor) < (3, 18):
-            raise RuntimeError("CMake >= 3.18.0 is required")
-
+        add_links()
         for ext in self.extensions:
-            self.build_extension(ext)
+            if isinstance(ext, CMakeExtension):
+                self.build_extension_cmake(ext)
+
+        all_extensions = self.extensions
+        self.extensions = [ext for ext in self.extensions if not isinstance(ext, CMakeExtension)]
+        super().run()
+        self.extensions = all_extensions
 
     def get_pybind11_cmake_args(self):
         pybind11_sys_path = get_env_with_keys(["PYBIND11_SYSPATH"])
@@ -449,15 +499,30 @@ class CMakeBuild(build_ext):
         cmake_args += self.get_pybind11_cmake_args()
         cupti_include_dir = get_env_with_keys(["TRITON_CUPTI_INCLUDE_PATH"])
         if cupti_include_dir == "":
-            cupti_include_dir = os.path.join(get_base_dir(), "third_party", "nvidia", "backend", "include")
+            cupti_include_dir = os.path.join(get_base_dir(), "3rdparty", "triton", "third_party", "nvidia", "backend",
+                                             "include")
         cmake_args += ["-DCUPTI_INCLUDE_DIR=" + cupti_include_dir]
         roctracer_include_dir = get_env_with_keys(["TRITON_ROCTRACER_INCLUDE_PATH"])
         if roctracer_include_dir == "":
-            roctracer_include_dir = os.path.join(get_base_dir(), "third_party", "amd", "backend", "include")
+            roctracer_include_dir = os.path.join(get_base_dir(), "3rdparty", "triton", "third_party", "amd", "backend",
+                                                 "include")
         cmake_args += ["-DROCTRACER_INCLUDE_DIR=" + roctracer_include_dir]
         return cmake_args
 
-    def build_extension(self, ext):
+    def build_extension_cmake(self, ext):
+        build_shmem()
+
+        try:
+            out = subprocess.check_output(["cmake", "--version"])
+        except OSError:
+            raise RuntimeError("CMake must be installed to build the following extensions: " +
+                               ", ".join(e.name for e in self.extensions))
+
+        match = re.search(r"version\s*(?P<major>\d+)\.(?P<minor>\d+)([\d.]+)?", out.decode())
+        cmake_major, cmake_minor = int(match.group("major")), int(match.group("minor"))
+        if (cmake_major, cmake_minor) < (3, 18):
+            raise RuntimeError("CMake >= 3.18.0 is required")
+
         lit_dir = shutil.which('lit')
         ninja_dir = shutil.which('ninja')
         # lit is used by the test suite
@@ -542,13 +607,25 @@ class CMakeBuild(build_ext):
             cmake_args += shlex.split(cmake_args_append)
 
         env = os.environ.copy()
+        if check_env_flag("TRITON_BUILD_DISTRIBUTED", "ON"):
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    if torch.version.hip is None:
+                        cmake_args += ["-DTRITON_BUILD_PYNVSHMEM=ON"]
+                        nvshmem_dir = os.path.join(get_base_dir(), "3rdparty", "nvshmem", "build", "install")
+                        env["NVSHMEM_DIR"] = nvshmem_dir
+            except Exception:
+                print("Cannot import torch.")
+                pass
+
         cmake_dir = get_cmake_dir()
         subprocess.check_call(["cmake", self.base_dir] + cmake_args, cwd=cmake_dir, env=env)
         subprocess.check_call(["cmake", "--build", "."] + build_args, cwd=cmake_dir)
         subprocess.check_call(["cmake", "--build", ".", "--target", "mlir-doc"], cwd=cmake_dir)
 
 
-nvidia_version_path = os.path.join(get_base_dir(), "cmake", "nvidia-toolchain-version.json")
+nvidia_version_path = os.path.join(get_base_dir(), "3rdparty", "triton", "cmake", "nvidia-toolchain-version.json")
 with open(nvidia_version_path, "r") as nvidia_version_file:
     # parse this json file to get the version of the nvidia toolchain
     NVIDIA_TOOLCHAIN_VERSION = json.load(nvidia_version_file)
@@ -582,6 +659,15 @@ download_and_copy(
     version=NVIDIA_TOOLCHAIN_VERSION["nvdisasm"],
     url_func=lambda system, arch, version:
     f"https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvdisasm/{system}-{arch}/cuda_nvdisasm-{system}-{arch}-{version}-archive.tar.xz",
+)
+download_and_copy(
+    name="nvcc",
+    src_func=lambda system, arch, version: f"cuda_nvcc-{system}-{arch}-{version}-archive/bin/nvlink{exe_extension}",
+    dst_path="bin/nvlink",
+    variable="TRITON_NVLINK_PATH",
+    version=NVIDIA_TOOLCHAIN_VERSION["nvlink"],
+    url_func=lambda system, arch, version:
+    f"https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/{system}-{arch}/cuda_nvcc-{system}-{arch}-{version}-archive.tar.xz",
 )
 download_and_copy(
     name="nvcc",
@@ -629,7 +715,9 @@ def add_link_to_backends():
         if backend.language_dir:
             # Link the contents of each backend's `language` directory into
             # `triton.language.extra`.
-            extra_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "triton", "language", "extra"))
+            extra_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), os.pardir, "3rdparty", "triton", "python", "triton", "language",
+                             "extra"))
             for x in os.listdir(backend.language_dir):
                 src_dir = os.path.join(backend.language_dir, x)
                 install_dir = os.path.join(extra_dir, x)
@@ -638,7 +726,9 @@ def add_link_to_backends():
         if backend.tools_dir:
             # Link the contents of each backend's `tools` directory into
             # `triton.tools.extra`.
-            extra_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "triton", "tools", "extra"))
+            extra_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), os.pardir, "3rdparty", "triton", "python", "triton", "tools",
+                             "extra"))
             for x in os.listdir(backend.tools_dir):
                 src_dir = os.path.join(backend.tools_dir, x)
                 install_dir = os.path.join(extra_dir, x)
@@ -646,16 +736,36 @@ def add_link_to_backends():
 
 
 def add_link_to_proton():
-    proton_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, "third_party", "proton", "proton"))
-    proton_install_dir = os.path.join(os.path.dirname(__file__), "triton", "profiler")
+    proton_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), os.pardir, "3rdparty", "triton", "third_party", "proton", "proton"))
+    proton_install_dir = os.path.join(os.path.dirname(__file__), os.pardir, "3rdparty", "triton", "python", "triton",
+                                      "profiler")
     update_symlink(proton_install_dir, proton_dir)
 
 
 def add_link_to_distributed():
-    distributed_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), os.pardir, "third_party", "distributed", "distributed"))
-    distributed_install_dir = os.path.join(os.path.dirname(__file__), "triton", "distributed")
-    update_symlink(distributed_install_dir, distributed_dir)
+    for name in ["libtriton_distributed.so", "libtriton_distributed_kernel.so"]:
+        distributed_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), os.pardir, "3rdparty", "triton", "python", "triton", "_C", name))
+        distributed_install_dir = os.path.join(os.path.dirname(__file__), "triton_dist", "_C", name)
+        update_symlink(distributed_install_dir, distributed_dir)
+
+    triton_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), os.pardir, "3rdparty", "triton", "python", "triton"))
+    triton_install_dir = os.path.join(os.path.dirname(__file__), "triton")
+    update_symlink(triton_install_dir, triton_dir)
+
+
+def add_link_to_pynvshmem():
+    triton_dist_root = Path(os.path.abspath(__file__)).parent.parent.absolute()
+    update_symlink(triton_dist_root / "python" / "triton_dist" / "pynvshmem",
+                   triton_dist_root / "shmem" / "nvshmem_bind" / "pynvshmem" / "python" / "pynvshmem")
+    # update pyi
+    update_symlink(triton_dist_root / "python" / "triton_dist" / "_C" / "_pynvshmem",
+                   triton_dist_root / "shmem" / "nvshmem_bind" / "pynvshmem" / "python" / "_pynvshmem")
+    # link nvshmem lib
+    update_symlink(triton_dist_root / "python" / "triton_dist" / "_C" / "nvshmem",
+                   triton_dist_root / "3rdparty" / "nvshmem" / "build" / "install")
 
 
 def add_links():
@@ -664,6 +774,17 @@ def add_links():
         add_link_to_proton()
     if check_env_flag("TRITON_BUILD_DISTRIBUTED", "ON"):  # Default ON
         add_link_to_distributed()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                if torch.version.hip is None:
+                    add_link_to_pynvshmem()
+                else:
+                    pass
+        except Exception:
+            print("Cannot import torch.")
+            pass
 
 
 class plugin_install(install):
@@ -697,7 +818,8 @@ class plugin_egginfo(egg_info):
 package_data = {
     "triton/tools/extra": sum((b.tools_package_data for b in backends), []),
     **{f"triton/backends/{b.name}": b.package_data
-       for b in backends}, "triton/language/extra": sum((b.language_package_data for b in backends), [])
+       for b in backends}, "triton/language/extra": sum((b.language_package_data for b in backends),
+                                                        []), '': ['*.so*', '*.a']
 }
 
 
@@ -743,7 +865,22 @@ def get_packages():
     if check_env_flag("TRITON_BUILD_PROTON", "ON"):  # Default ON
         packages += ["triton/profiler"]
     if check_env_flag("TRITON_BUILD_DISTRIBUTED", "ON"):  # Default ON
-        packages += ["triton/distributed"]
+        packages += [
+            "triton_dist/_C", "triton_dist/kernels", "triton_dist/kernels/nvidia", "triton_dist/kernels/amd",
+            "triton_dist/layers/nvidia", "triton_dist/tools", "triton_dist/test"
+        ]
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                if torch.version.hip is None:
+                    packages += ["triton_dist/pynvshmem"]
+                    packages += ["triton_dist/_C/_pynvshmem"]
+                else:
+                    pass
+        except Exception:
+            print("Cannot import torch.")
+            pass
 
     return packages
 
@@ -782,19 +919,25 @@ def get_git_version_suffix():
         return get_git_commit_hash()
 
 
+# set ext_modules
+ext_modules = [
+    CMakeExtension(f"{get_base_dir()}/3rdparty/triton/python/triton",
+                   f"{get_base_dir()}/3rdparty/triton/python/triton/_C/")
+]
+
 setup(
-    name=os.environ.get("TRITON_WHEEL_NAME", "triton"),
+    name=os.environ.get("TRITON_WHEEL_NAME", "triton_dist"),
     version="3.3.0" + get_git_version_suffix() + os.environ.get("TRITON_WHEEL_VERSION_SUFFIX", ""),
-    author="Philippe Tillet",
-    author_email="phil@openai.com",
-    description="A language and compiler for custom Deep Learning operations",
+    author="ByteDance Seed",
+    author_email="zheng.size@bytedance.com",
+    description="Triton language and compiler extension for distributed deep learning systems",
     long_description="",
     install_requires=["setuptools>=40.8.0"],
     packages=get_packages(),
     entry_points=get_entry_points(),
     package_data=package_data,
     include_package_data=True,
-    ext_modules=[CMakeExtension("triton", "triton/_C/")],
+    ext_modules=ext_modules,
     cmdclass={
         "build_ext": CMakeBuild,
         "build_py": CMakeBuildPy,
@@ -803,11 +946,12 @@ setup(
         "develop": plugin_develop,
         "bdist_wheel": plugin_bdist_wheel,
         "egg_info": plugin_egginfo,
+        "build_shmem": SHMEMBuildOnly,
     },
     zip_safe=False,
     # for PyPI
-    keywords=["Compiler", "Deep Learning"],
-    url="https://github.com/triton-lang/triton/",
+    keywords=["Compiler", "Deep Learning", "Overlapping", "Distributed"],
+    url="https://github.com/ByteDance-Seed/Triton-distributed",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -821,10 +965,7 @@ setup(
     ],
     test_suite="tests",
     extras_require={
-        "build": [
-            "cmake>=3.20",
-            "lit",
-        ],
+        "build": ["cmake>=3.20", "lit", "packaging", "ninja", "cuda-python==12.4", "pybind11"],
         "tests": [
             "autopep8",
             "isort",
@@ -834,11 +975,14 @@ setup(
             "pytest-xdist",
             "scipy>=1.7.1",
             "llnl-hatchet",
+            "pytest",
+            "nvidia-ml-py",
         ],
         "tutorials": [
             "matplotlib",
             "pandas",
             "tabulate",
+            "chardet",
         ],
     },
 )

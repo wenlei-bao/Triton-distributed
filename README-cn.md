@@ -20,7 +20,7 @@
 ![seed logo](https://github.com/user-attachments/assets/c42e675e-497c-4508-8bb9-093ad4d1f216)
 
 # Triton-distributed
-<!-- 
+<!--
 <p align="center">
   <a href="https://github.com/bytedance/flux">
     <img src="https://img.shields.io/badge/Triton-distributed-Project Page-yellow"></a>
@@ -42,12 +42,12 @@ Triton-distributed是基于OpenAI Triton构建的分布式编译器，专为计�
 ## 快速入门
 ### 源码安装
 
-[安装指导](docs/distributed/build.md)
+[安装指导](docs/build.md)
 
 ### 如何使用 Triton-distributed
 Triton-distributed 提供了一套易于使用的原语，用于支持开发计算-通信融合的分布式kernel。这些原语分为低层次原语和高层次原语。目前，我们已经发布了低层次原语，并计划在未来发布高层次原语。
 
-[Triton-distributed 原语](docs/distributed/primitives.md)
+[Triton-distributed 原语](docs/primitives.md)
 
 使用这些原语，用户可以轻松编写通信kernel。例如，以下展示了一个低延迟的AllToAll通信操作（在推理场景下，其延迟表现优于[DeepEP](https://github.com/deepseek-ai/DeepEP)）。这个例子在32卡H800集群中性能是137微秒（每个卡128 token, topk=8, hidden_size=7168, 数据类型是fp8），DeepEP是182微秒（DeepEP推理不用NVLink）
 ```py
@@ -150,16 +150,16 @@ Triton-distributed 可以达到和手写分布式算子库接近的性能，有�
 ![Ag-GEMM-inter-node](asset/gemm-rs-intranode-perf.png)
 
 ### AllGather GEMM 双机H800
-![Ag-GEMM-inter-node](asset/ag-inter-node-gemm.png)
+![Ag-GEMM-inter-node](asset/ag-gemm-internode-perf.png)
 
 ### GEMM ReduceScatter 双机H800
-![GEMM-Rs-inter-node](asset/gemm-rs-inter-node.png)
+![GEMM-Rs-inter-node](asset/gemm-rs-internode-perf.png)
 
 ### 分布式Flash-Decode从单机到四机扩展情况
 ![flash-decode-inter-node](asset/flash-decode-scaling.png)
 
 ### 其他平台性能
-[AMD GPUs](docs/distributed/amd-perf.md)
+[AMD GPUs](docs/amd-perf.md)
 
 ## Roadmaps
 ### 功能
@@ -206,12 +206,12 @@ Triton原本又些代码也是 Apache-2.0 License的:
 ## 引用
 如在学术研究中使用Triton-distributed，请引用：
 ```bibtex
-@misc{zheng2025tilelink,
-      title={TileLink: Generating Efficient Compute-Communication Overlapping Kernels using Tile-Centric Primitives},
-      author={Size Zheng and Jin Fang and Xuegui Zheng and Qi Hou and Wenlei Bao and Ningxin Zheng and Ziheng Jiang and Dongyang Wang and Jianxi Ye and Haibin Lin and Li-Wen Chang and Xin Liu},
-      year={2025},
-      eprint={TBD},
-      archivePrefix={MLSys}
+@inproceedings{zheng2025tilelink,
+      author = {Size Zheng and Jin Fang and Xuegui Zheng and Qi Hou and Wenlei Bao and Ningxin Zheng and Ziheng Jiang and Dongyang Wang and Jianxi Ye and Haibin Lin and Li-Wen Chang and Xin Liu},
+      booktitle = {Proceedings of Machine Learning and Systems},
+      title = {TileLink: Generating Efficient Compute-Communication Overlapping Kernels using Tile-Centric Primitives},
+      url = {https://arxiv.org/abs/2503.20313},
+      year = {2025}
 }
 ```
 
@@ -222,4 +222,4 @@ Triton原本又些代码也是 Apache-2.0 License的:
 ---
 
 # 交流与讨论
-<img src="asset/wechat-group-temporal.png" width="200" height="200" alt="微信讨论群">
+<img src="asset/asset_wechat-group-temporal.jpg" width="200" height="300" alt="微信讨论群">

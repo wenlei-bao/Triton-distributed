@@ -44,12 +44,12 @@ Feel free to contact us if you want to use Triton-distributed on your own hardwa
 ## Getting started
 ### Install Triton-distributed from source
 
-[Build Guide](docs/distributed/build.md)
+[Build Guide](docs/build.md)
 
 ### How to use Triton-distributed
 Triton-distributed provides a set of easy-to use primitives to support the development of distributed compute-communication overlapping kernels. The primitives are divided into low-level primitives and high-level primitives. Currently, we have released our low-level primitives, and we plan to release high-level primitives in future.
 
-[Triton-distributed Primitives](docs/distributed/primitives.md)
+[Triton-distributed Primitives](docs/primitives.md)
 
 Using these primitives, users can program communication kernels easily. For example, a low-latency AllToAll (with better latency than [DeepEP](https://github.com/deepseek-ai/DeepEP) for inference) is shown below.
 The performance of this example on 32 H800 GPUs is 137us (128 tokens per rank, topk=8, hidden_size=7168, dtype=fp8), while DeepEP is 182 us (note: DeepEP doesn't use NVLink for inference).
@@ -153,17 +153,17 @@ Triton-distributed can achieve comparable or better performance than hand-tuned 
 ![Ag-GEMM-inter-node](asset/gemm-rs-intranode-perf.png)
 
 ### AllGather GEMM on 2 nodes of H800x8
-![Ag-GEMM-inter-node](asset/ag-inter-node-gemm.png)
+![Ag-GEMM-inter-node](asset/ag-gemm-internode-perf.png)
 
 ### GEMM ReduceScatter on 2 nodes of H800x8
-![GEMM-Rs-inter-node](asset/gemm-rs-inter-node.png)
+![GEMM-Rs-inter-node](asset/gemm-rs-internode-perf.png)
 
 ### Scaling of Distributed Flash-Decode from 1 GPU to 32 GPUs
 The batch size is 1 (one query) for decoding.
 ![flash-decode-inter-node](asset/flash-decode-scaling.png)
 
 ### Performance on Other Platforms
-[AMD GPUs](docs/distributed/amd-perf.md)
+[AMD GPUs](docs/amd-perf.md)
 
 
 ## Roadmaps
@@ -211,10 +211,12 @@ Triton's original code is partially under Apache-2.0 License, these files includ
 ## Citation
 If you use Triton-distributed in a scientific publication, we encourage you to add the following reference to the related papers:
 ```bibtex
-@misc{zheng2025tilelink,
-      title={TileLink: Generating Efficient Compute-Communication Overlapping Kernels using Tile-Centric Primitives},
-      author={Size Zheng, Jin Fang, Xuegui Zheng, Qi Hou, Wenlei Bao, Ningxin Zheng, Ziheng Jiang, Dongyang Wang, Jianxi Ye, Haibin Lin, Li-Wen Chang, Xin Liu},
-      year={2025},
+@inproceedings{zheng2025tilelink,
+      author = {Size Zheng and Jin Fang and Xuegui Zheng and Qi Hou and Wenlei Bao and Ningxin Zheng and Ziheng Jiang and Dongyang Wang and Jianxi Ye and Haibin Lin and Li-Wen Chang and Xin Liu},
+      booktitle = {Proceedings of Machine Learning and Systems},
+      title = {TileLink: Generating Efficient Compute-Communication Overlapping Kernels using Tile-Centric Primitives},
+      url = {https://arxiv.org/abs/2503.20313},
+      year = {2025}
 }
 ```
 
