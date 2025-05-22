@@ -42,9 +42,22 @@ Triton-distributed currently mainly targets Nvidia GPU and AMD GPU. It can also 
 Feel free to contact us if you want to use Triton-distributed on your own hardware.
 
 ## Getting started
-### Install Triton-distributed from source
 
-[Build Guide](docs/build.md)
+### Install Triton-distributed
+
+#### Method 1. From source
+
+See [build from source](docs/build.md).
+
+#### Method 2. Using pip
+
+First, please download and fix NVSHMEM manually (as we cannot do this for you due to NVSHMEM license requirements). See [prepare NVSHMEM](docs/prepare_nvshmem.md).
+
+Then, pip install triton-dist.
+```sh
+export NVSHMEM_SRC=/path/to/nvshmem
+pip install "git+https://github.com/ByteDance-Seed/Triton-distributed.git#subdirectory=python" --no-build-isolation --force-reinstall
+```
 
 ### How to use Triton-distributed
 Triton-distributed provides a set of easy-to use primitives to support the development of distributed compute-communication overlapping kernels. The primitives are divided into low-level primitives and high-level primitives. Currently, we have released our low-level primitives, and we plan to release high-level primitives in future.
