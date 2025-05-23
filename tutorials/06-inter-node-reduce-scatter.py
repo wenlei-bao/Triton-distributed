@@ -30,7 +30,6 @@ In this tutorial, you will write a multi-node reduce-scatter operation.
 .. code-block:: bash
 
     # To run this tutorial
-    source ./scripts/sentenv.sh
     bash ./launch.sh ./tutorials/06-inter-node-reduce-scatter.py
 
 """

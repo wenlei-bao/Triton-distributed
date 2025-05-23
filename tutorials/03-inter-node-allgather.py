@@ -30,7 +30,6 @@ In this tutorial, you will write a low latency all gather kernel using using Tri
 .. code-block:: bash
 
     # To run this tutorial
-    source ./scripts/sentenv.sh
     bash ./launch.sh ./tutorials/03-inter-node-allgather.py
 
 """
@@ -266,6 +265,7 @@ nbytes = 8 * 1024  # total bytes for AllGather
 # since our implementation does not wait for other peers done, so a double buffer is
 # used to avoid data corupt when all_gather kernels are in different phases.
 ag_buffer = pynvshmem.nvshmem_create_tensor((2, nbytes), torch.int8)
+signals = [pynvshmem.nvshmem_create_tensor((1, ), torch.uint64) for _ in range(2)]
 
 # keep some veriables here
 ctx = AllGatherContext(
@@ -273,7 +273,7 @@ ctx = AllGatherContext(
     node=RANK // LOCAL_WORLD_SIZE,
     num_ranks=WORLD_SIZE,
     num_nodes=NNODES,
-    signal_tensor=[pynvshmem.nvshmem_create_tensor((1, ), torch.uint64) for _ in range(2)],
+    signal_tensor=signals,
     signal_value=10,
 )
 print("using push 1d...")
@@ -291,4 +291,7 @@ perf_ag(
     ctx,
 )
 
+del ag_buffer
+del signals[-1]
+del signals[-1]
 torch.distributed.destroy_process_group()

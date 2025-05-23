@@ -36,7 +36,6 @@ In doing so, you will learn about:
 .. code-block:: bash
 
     # To run this tutorial
-    source ./scripts/sentenv.sh
     bash ./launch.sh ./tutorials/08-overlapping-gemm-reduce-scatter.py
 
 """
@@ -416,7 +415,7 @@ def torch_gemm_rs(
 
 
 if __name__ == "__main__":
-    if torch.cuda.get_device_capability()[0] <= 9:
+    if torch.cuda.get_device_capability()[0] < 9:
         print("Skip the test because the device is not sm90 or higher")
         import sys
         sys.exit()

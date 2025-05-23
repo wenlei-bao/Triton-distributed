@@ -37,7 +37,6 @@ In doing so, you will learn about:
 .. code-block:: bash
 
     # To run this tutorial
-    source ./scripts/sentenv.sh
     bash ./launch.sh ./tutorials/02-intra-node-allgather.py
 
 """
@@ -186,5 +185,8 @@ if __name__ == "__main__":
     dist_print(f"Rank {rank} NVSHMEM Signal:\n", signal[rank], need_sync=True, allowed_ranks="all")
     assert torch.allclose(golden, ag_buffer_ptrs[rank], atol=1e-5, rtol=1e-5)
     dist_print(f"Rank {rank}", "Pass!✅", need_sync=True, allowed_ranks="all")
+
+    del ag_buffer_ptrs
+    del signal
 
     torch.distributed.destroy_process_group()
