@@ -2,6 +2,10 @@
 
 
 1. Download NVSHMEM 3.2.5 Source Code [NVSHMEM Open Source Packages](https://developer.nvidia.com/downloads/assets/secure/nvshmem/nvshmem_src_3.2.5-1.txz)
+    ```sh
+    cd /workspace
+    wget https://developer.nvidia.com/downloads/assets/secure/nvshmem/nvshmem_src_3.2.5-1.txz
+    ```
 
 2. Extract to designated location
     ```sh
@@ -36,9 +40,7 @@
     + __device__ int __nvvm_reflect(const void *s);
     ```
 
-5. Install Clang-19 for building NVSHMEM bitcode library
-
-    Clang-19 is required to build NVSHMEM bitcode library. To install Clang-19, we recommend pre-built binary:
+5. Setup `NVSHMEM_SRC` environment variable
     ```sh
-    sudo apt install clang-19 llvm-19 libclang-19-dev
+    export NVSHMEM_SRC=/workspace/nvshmem_src
     ```

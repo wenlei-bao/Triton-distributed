@@ -48,11 +48,25 @@ Triton-distributed是基于OpenAI Triton构建的分布式编译器，专为计�
 
 #### 方法 2. 用pip安装
 
-首先，需要准备好NVSHMEM，并手动修改NVSHMEM的bug (由于NVSHMEM的许可证限制，我们无法预先为用户做这件事，必须由用户手动完成). 请看[文档](docs/prepare_nvshmem.md).
-
-然后, pip安装.
+首先，准备好PyTorch容器
 ```sh
-export NVSHMEM_SRC=/path/to/nvshmem
+docker run --name triton-dist --ipc=host --network=host --privileged --cap-add=SYS_ADMIN --shm-size=10g --gpus=all -itd nvcr.io/nvidia/pytorch:25.04-py3 /bin/bash
+docker exec -it triton-dist /bin/bash
+```
+
+然后，需要准备好NVSHMEM，并手动修改NVSHMEM的bug (由于NVSHMEM的许可证限制，我们无法预先为用户做这件事，必须由用户手动完成). 请看[文档](docs/prepare_nvshmem.md).
+
+这之后，安装clang-19
+```sh
+apt update
+apt upgrade apt install clang-19 llvm-19 libclang-19-dev
+```
+
+最后, pip安装.
+```sh
+export NVSHMEM_SRC=/workspace/nvshmem
+export CC=clang-19
+export CXX=clang-19++
 pip install "git+https://github.com/ByteDance-Seed/Triton-distributed.git#subdirectory=python" --no-build-isolation --force-reinstall
 ```
 

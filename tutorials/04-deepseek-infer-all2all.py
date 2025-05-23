@@ -55,7 +55,6 @@ At the core of our implementation are low-level primitives that manage the commu
 .. code-block:: bash
 
     # To run this tutorial
-    source ./scripts/sentenv.sh
     bash ./launch.sh ./tutorials/04-deepseek-infer-all2all.py
 
 """
@@ -535,8 +534,11 @@ if __name__ == "__main__":
             dist_print(f"❌ Round-{round} combine check failed! {e}")
             raise e
 
+    del send_buf
+    del recv_buf
+    del scale_send_buf
+    del scale_recv_buf
+    del split_send_buf
+    del split_recv_buf
+    del signal_buf
     torch.distributed.destroy_process_group()
-
-# To run this tutorial
-# source ./scripts/sentenv.sh
-# bash ./third_party/distributed/launch.sh ./third_party/distributed/tutorials/04-deepseek-infer-all2all.py

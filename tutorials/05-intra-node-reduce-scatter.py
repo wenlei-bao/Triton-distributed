@@ -35,7 +35,6 @@ In doing so, you will learn about:
 .. code-block:: bash
 
     # To run this tutorial
-    source ./scripts/sentenv.sh
     bash ./launch.sh ./tutorials/05-intra-node-reduce-scatter.py
 
 """

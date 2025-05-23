@@ -1,10 +1,12 @@
 # Build Triton-distributed
 
 ## The best practice to use Triton-distributed with the Nvidia backend:
-- Python 3.11 (suggest using virtual environment)
-- CUDA 12.4
-- Torch 2.4.1
-- Clang 19
+- Python >=3.11 (suggest using virtual environment)
+- CUDA >=12.4
+- Torch >=2.4.1
+- Clang >=19
+
+We recommend installation in [Nvidia PyTorch container](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch/tags).
 
 #### if for AMD GPU:
 - ROCM 6.3.0
@@ -15,55 +17,41 @@
 Dependencies with other versions may also work well, but this is not guaranteed. If you find any problem in installing, please tell us in Issues.
 
 ### Steps:
-1. Clone Triton-distributed to your own path (e.g., `/home/Triton-distributed`)
-2. Update submodules
+1. Prepare docker container:
     ```sh
+    docker run --name triton-dist --ipc=host --network=host --privileged --cap-add=SYS_ADMIN --shm-size=10g --gpus=all -itd nvcr.io/nvidia/pytorch:25.04-py3 /bin/bash
+    docker exec -it triton-dist /bin/bash
+    ```
+
+2. Clone Triton-distributed to your own path (e.g., `/workspace/Triton-distributed`)
+    ```sh
+    git clone https://github.com/ByteDance-Seed/Triton-distributed.git
+    ```
+
+3. Update submodules
+    ```sh
+    cd /workspace/Triton-distributed
     git submodule update --init --recursive
     ```
-3. Install dependencies
+
+4. Install dependencies (optional for PyTorch container)
+    > Note: Not needed for PyTorch container
     ```sh
+    # If you are not using PyTorch container
     pip3 install torch==2.4.1
-    pip3 install black "clang-format==19.1.2" pre-commit ruff yapf==0.43
-    pip3 install ninja cmake wheel pybind11 cuda-python==12.4 numpy chardet pytest
+    pip3 install cuda-python==12.4 # need to align with your nvcc version
+    pip3 install ninja cmake wheel pybind11 numpy chardet pytest
     ```
-4. Apply NVSHMEM fix
-(Disclaimer: This step is because of NVSHMEM license requirements, it is illegal to release any modified codes or patch.)
+5. Prepare NVSHMEM and Clang-19.
 
-    1. Download NVSHMEM 3.2.5 Source Code [NVSHMEM Open Source Packages](https://developer.nvidia.com/downloads/assets/secure/nvshmem/nvshmem_src_3.2.5-1.txz)
-    2. Extract to designated location
-        ```sh
-        mkdir -p /home/Triton-distributed/3rdparty/nvshmem
-        tar -xvf nvshmem_src_3.2.5-1.txz -C /home/Triton-distributed/3rdparty/nvshmem/ --strip-components=1
-        ```
-    3. Bitcode Bug Fix: [BUG with nvshmem 3.2.5 for bitcode compiling](https://forums.developer.nvidia.com/t/bug-with-nvshmem-3-2-5-for-bitcode-compiling/327847)
+    See [the guide](prepare_nvshmem.md) to prepare NVSHMEM.
 
-       File: ```src/include/non_abi/device/common/nvshmemi_common_device.cuh``` (Line 287)
-       ```cpp
-        - dst = (void *)(dst_p + nelems);
-        - src = (void *)(src_p + nelems);
-
-        +#ifdef __clang_llvm_bitcode_lib__
-        +    dst = (void *)(dst_p + nelems * 4);
-        +    src = (void *)(src_p + nelems * 4);
-        +#else
-        +    dst = (void *)(dst_p + nelems);
-        +    src = (void *)(src_p + nelems);
-        +#endif
-        ```
-    4. Clang Compilation Error Fix
-
-       File: ```src/include/device_host/nvshmem_common.cuh``` (Line 41)
-       ```cpp
-        - __device__ int __nvvm_reflect(const char *s);
-        + __device__ int __nvvm_reflect(const void *s);
-       ```
-
-5. Build or install Clang-19 for building NVSHMEM bitcode library
-
-    Clang-19 is required to build NVSHMEM bitcode library. To install Clang-19, we recommend pre-built binary:
+    Clang-19 is required to build NVSHMEM bitcode library and Triton. To install Clang-19, we recommend pre-built binary:
     ```sh
-    sudo apt install clang-19 llvm-19 libclang-19-dev
+    apt update
+    apt install clang-19 llvm-19 libclang-19-dev
     ```
+
     Also, you may install Clang-19 from source by building LLVM (see [how to build LLVM](https://llvm.org/docs/CMake.html)).
     ```sh
     git clone git@github.com:llvm/llvm-project.git
@@ -80,19 +68,24 @@ Dependencies with other versions may also work well, but this is not guaranteed.
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/llvm-project/build/lib
     ```
 
-    For ROCMSHMEM on AMD GPU, no explicit build required as the building process is integrated with Triton-distributed.
-
 6. Build Triton-distributed
     Then you can build Triton-distributed.
     ```sh
-    cd /home/Triton-distributed
+    # Not recommend to use g++
+    export CC=clang-19
+    export CXX=clang++-19
+    # Remove triton installed with torch
+    pip uninstall triton
+    rm -rf /usr/local/lib/python3.12/dist-packages/triton
+    # Install Triton-distributed
+    cd /workspace/Triton-distributed
     export USE_TRITON_DISTRIBUTED_AOT=0
     pip3 install -e python --verbose --no-build-isolation
     ```
 
-    We also provide AOT version of Triton-distributed. If you want to use AOT, then
+    We also provide AOT version of Triton-distributed. If you want to use AOT (**Not Recommended**), then
     ```sh
-    cd /home/Triton-distributed/
+    cd /workspace/Triton-distributed/
     source scripts/setenv.sh
     bash scripts/gen_aot_code.sh
     export USE_TRITON_DISTRIBUTED_AOT=1
@@ -100,7 +93,7 @@ Dependencies with other versions may also work well, but this is not guaranteed.
     ```
     (Note: You have to first build non-AOT version before building AOT version, once you build AOT version, you will always build for AOT in future. To unset this, you have to remove your build directory: `python/build`)
 
-7. Setup environment variables (Do this step at the beginning every time you use Triton-distributed)
+7. Setup environment variables (Optional)
     ```sh
     cd /home/Triton-distributed
     source scripts/setenv.sh
@@ -124,48 +117,8 @@ bash ./launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 2956
 bash ./launch.sh ./python/triton_dist/test/nvidia/test_nvshmem_api.py
 ```
 
-### Run All The Test Files
-```sh
-# basic
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness_tma
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness_tma_multi_barrier
-# ag gemm
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_gemm.py --case correctness
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_gemm.py --case correctness_autotune
-# gemm rs
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 29568
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 29568 --check
-# allgather
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_small_msg.py
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_all_gather.py
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_fast_allgather.py   --iters 10   --warmup_iters 20   --mode push_2d_ll   --minbytes 4096   --maxbytes 8192
-# all-to-all
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_all_to_all.py
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_ep_moe_inference.py
-# nvshmem related
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_nvshmem_api.py
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_ring_put.py
-# flash decoding
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_persistent
-USE_TRITON_DISTRIBUTED_AOT=1 bash ./launch.sh  ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_persistent_aot
-USE_TRITON_DISTRIBUTED_AOT=1 bash ./launch.sh  ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_aot
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case perf
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case correctness
-USE_TRITON_DISTRIBUTED_AOT=1 bash ./launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case correctness
-# ag moe
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_moe.py --M 2048
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_moe.py --M 2048 --autotune
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_moe_inter_node.py --M 2048
-# moe rs
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2 --check
-bash ./launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2 --check --autotune
-# ep a2a
-NVSHMEM_SYMMETRIC_SIZE=10000000000 bash ./launch.sh  ./python/triton_dist/test/nvidia/test_ep_a2a.py -M 8192 -N 7168 --topk 8 --check
-NVSHMEM_SYMMETRIC_SIZE=10000000000 bash ./launch.sh  ./python/triton_dist/test/nvidia/test_ep_a2a.py -M 8192 -N 7168 --topk 8
-```
+### Run All The Tutorials
+See examples in [`tutorials`](../tutorials/README.md)
 
 ## To use Triton-distributed with the AMD backend:
 Starting from the rocm/pytorch:rocm6.1_ubuntu22.04_py3.10_pytorch_2.4 Docker container
