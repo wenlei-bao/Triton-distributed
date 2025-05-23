@@ -57,6 +57,15 @@ function move_libnvshmem_device_bc() {
     rm -rf "$tmp_dir"
     return 1
   fi
+
+  lib_file=${nvshmem_dir}/build/install/lib/libnvshmemi_device.bc
+  if ! mv -f $lib_file $dst_path; then
+    echo "File move failed" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  echo "Move done."
 }
 
 set_arch

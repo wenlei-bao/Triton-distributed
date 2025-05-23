@@ -183,7 +183,7 @@ The batch size is 1 (one query) for decoding.
 ### Functionalities
 - [x] Release low-level primitives
 - [ ] Release high-level primitives
-- [ ] Tutorials
+- [x] Tutorials
 - [ ] Pre-built binary
 ### Kernels
 - [x] Release single-node GEMM TP overlapping kernels
@@ -194,7 +194,7 @@ The batch size is 1 (one query) for decoding.
 - [x] Release cross-node MoE TP overlapping kernels
 - [x] Release cross-node distributed Flash-Decoding kernels
 - [x] Release cross-node EP all-to-all kernels (similar to [DeepEP](https://github.com/deepseek-ai/DeepEP))
-- [ ] Provide tutorials for kernel implementation
+- [x] Provide tutorials for kernel implementation
 ### Backends
 Computation
 - [x] Nvidia SM90a support
@@ -205,9 +205,9 @@ Computation
 Communication
 - [x] NVLink
 - [x] IB
-- [ ] PCIe 
+- [x] PCIe 
 ### Performance
-- [ ] Performance report
+- [x] Performance report
 
 ## License
 The Triton-distributed project is under MIT license.

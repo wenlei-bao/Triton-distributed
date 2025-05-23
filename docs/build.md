@@ -110,61 +110,61 @@ Dependencies with other versions may also work well, but this is not guaranteed.
 #### AllGather GEMM example on single node
 This example runs on a single node with 8 H800 GPUs.
 ```sh
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness_tma
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness_tma
 ```
 
 #### GEMM ReduceScatter example on single node
 This example runs on a single node with 8 H800 GPUs.
 ```sh
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 29568
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 29568
 ```
 
 #### NVSHMEM example in Triton-distributed
 ```sh
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_nvshmem_api.py
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_nvshmem_api.py
 ```
 
 ### Run All The Test Files
 ```sh
 # basic
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness_tma
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness_tma_multi_barrier
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness_tma
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_distributed_wait.py --case correctness_tma_multi_barrier
 # ag gemm
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_ag_gemm.py --case correctness
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_ag_gemm.py --case correctness_autotune
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_gemm.py --case correctness
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_gemm.py --case correctness_autotune
 # gemm rs
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 29568
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 29568 --check
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 29568
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_gemm_rs.py 8192 8192 29568 --check
 # allgather
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_ag_small_msg.py
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_all_gather.py
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_fast_allgather.py   --iters 10   --warmup_iters 20   --mode push_2d_ll   --minbytes 4096   --maxbytes 8192
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_small_msg.py
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_all_gather.py
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_fast_allgather.py   --iters 10   --warmup_iters 20   --mode push_2d_ll   --minbytes 4096   --maxbytes 8192
 # all-to-all
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_all_to_all.py
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_ep_moe_inference.py
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_all_to_all.py
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_ep_moe_inference.py
 # nvshmem related
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_nvshmem_api.py
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_ring_put.py
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_nvshmem_api.py
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_ring_put.py
 # flash decoding
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_persistent
-USE_TRITON_DISTRIBUTED_AOT=1 bash ./scripts/launch.sh  ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_persistent_aot
-USE_TRITON_DISTRIBUTED_AOT=1 bash ./scripts/launch.sh  ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_aot
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case perf
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case correctness
-USE_TRITON_DISTRIBUTED_AOT=1 bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case correctness
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_persistent
+USE_TRITON_DISTRIBUTED_AOT=1 bash ./launch.sh  ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_persistent_aot
+USE_TRITON_DISTRIBUTED_AOT=1 bash ./launch.sh  ./python/triton_dist/test/nvidia/test_decode_attn.py --case perf_8k_aot
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case perf
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case correctness
+USE_TRITON_DISTRIBUTED_AOT=1 bash ./launch.sh ./python/triton_dist/test/nvidia/test_sp_decode_attn.py --case correctness
 # ag moe
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_ag_moe.py --M 2048
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_ag_moe.py --M 2048 --autotune
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_ag_moe_inter_node.py --M 2048
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_moe.py --M 2048
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_moe.py --M 2048 --autotune
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_ag_moe_inter_node.py --M 2048
 # moe rs
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2 --check
-bash ./scripts/launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2 --check --autotune
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2 --check
+bash ./launch.sh ./python/triton_dist/test/nvidia/test_moe_reduce_rs.py 8192 2048 1536 32 2 --check --autotune
 # ep a2a
-NVSHMEM_SYMMETRIC_SIZE=10000000000 bash ./scripts/launch.sh  ./python/triton_dist/test/nvidia/test_ep_a2a.py -M 8192 -N 7168 --topk 8 --check
-NVSHMEM_SYMMETRIC_SIZE=10000000000 bash ./scripts/launch.sh  ./python/triton_dist/test/nvidia/test_ep_a2a.py -M 8192 -N 7168 --topk 8
+NVSHMEM_SYMMETRIC_SIZE=10000000000 bash ./launch.sh  ./python/triton_dist/test/nvidia/test_ep_a2a.py -M 8192 -N 7168 --topk 8 --check
+NVSHMEM_SYMMETRIC_SIZE=10000000000 bash ./launch.sh  ./python/triton_dist/test/nvidia/test_ep_a2a.py -M 8192 -N 7168 --topk 8
 ```
 
 ## To use Triton-distributed with the AMD backend:
@@ -195,7 +195,7 @@ pip3 install -e python --verbose --no-build-isolation
 ### Test your installation
 #### GEMM ReduceScatter example on single node
 ```sh
-bash ./scripts/launch_amd.sh ./python/triton_dist/test/amd/test_ag_gemm_intra_node.py 8192 8192 29568
+bash ./launch_amd.sh ./python/triton_dist/test/amd/test_ag_gemm_intra_node.py 8192 8192 29568
  ```
 and see the following (reduced) output
 ```sh

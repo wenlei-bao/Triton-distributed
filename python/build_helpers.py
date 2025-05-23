@@ -1,8 +1,31 @@
+################################################################################
+#
+# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files
+# (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge,
+# publish, distribute, sublicense, and/or sell copies of the Software,
+# and to permit persons to whom the Software is furnished to do so,
+# subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+################################################################################
 import os
 import sysconfig
 import sys
 from pathlib import Path
-import shutil
 
 
 def get_base_dir():
@@ -18,7 +41,30 @@ def get_cmake_dir():
     return cmake_dir
 
 
-def copy_apply_patches():
+def create_symlink_rel(source: Path, target: Path, base_dir: Path, dryrun: bool = False):
+    """if both source/target under base_dir, create link with relative path.
+
+    why it's tricky for that?
+
+    source maybe file or directory. maybe relative or absolute.
+    target maybe file or directory. maybe relative or absolute.
+    base_dir maybe relative or absolute.
+    """
+    # should relative
+    base_dir = base_dir.resolve()
+    target.parent.mkdir(exist_ok=True, parents=True)
+    if source.resolve().is_relative_to(base_dir) and target.resolve().is_relative_to(base_dir):
+        source = source.absolute()
+        target = target.absolute()
+        source = Path(os.path.relpath(source, target.parent))
+
+    if target.is_symlink() or target.exists():
+        target.unlink()
+    if not dryrun:
+        target.symlink_to(source, target_is_directory=source.is_dir())
+
+
+def softlink_apply_patches():
     # Get the directory where the current script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
     # Construct the path of the patches/triton directory
@@ -46,5 +92,6 @@ def copy_apply_patches():
         for file in files:
             source_file = os.path.join(root, file)
             target_file = os.path.join(target_dir, file)
-            shutil.copy2(source_file, target_file)
-            print(f"Copied {source_file} to {target_file}")
+            # Check if the source file is a relative path
+            base_dir = Path(__file__).parent.parent
+            create_symlink_rel(Path(source_file), Path(target_file), base_dir)

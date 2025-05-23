@@ -35,8 +35,9 @@ from triton_dist import pynvshmem
 from triton.language.extra import libshmem_device
 
 import triton_dist.language as dl
-from triton_dist.kernels.nvidia.common_ops import (barrier_all_on_stream, set_signal, wait_eq, barrier_on_this_grid)
-from triton_dist.utils import (CUDA_CHECK, get_has_nvlink)
+from triton_dist.kernels.nvidia.common_ops import (barrier_all_on_stream, set_signal, wait_eq, barrier_on_this_grid,
+                                                   BarrierAllContext)
+from triton_dist.utils import (CUDA_CHECK, get_has_fullmesh_nvlink)
 from triton.language.extra.cuda.language_extra import tid, __syncthreads, ld, st
 
 SIGNAL_DTYPE = torch.uint64
@@ -59,8 +60,9 @@ class ReduceScatter2DContext:
 
     # barrier bufs
     signal_bufs: List[torch.Tensor]  # need reset: signal_buf =  scatter_signal | rs_per_node_signal
-    sync_buf: torch.Tensor  # no need to reset
-    stage: int
+
+    # intra-node barrier
+    barrier: BarrierAllContext
 
     # stream
     reduction_stream: torch.cuda.Stream
@@ -163,11 +165,7 @@ def create_reduce_scater_2d_ctx(max_M, N, rank, world_size, local_world_size, dt
         world_size * num_signal_bufs,
     ], SIGNAL_DTYPE)
 
-    sync_buf = pynvshmem.nvshmem_create_tensor([
-        local_world_size,
-    ], torch.int32)
-    sync_buf.fill_(0)
-    pynvshmem.nvshmemx_barrier_all_on_stream(torch.cuda.current_stream().cuda_stream)
+    barrier_all_on_stream(None, torch.cuda.current_stream())
 
     p2p_stream: torch.cuda.Stream = torch.cuda.Stream(priority=-1)
     reduction_stream: torch.cuda.Stream = torch.cuda.Stream(priority=-1)
@@ -177,8 +175,8 @@ def create_reduce_scater_2d_ctx(max_M, N, rank, world_size, local_world_size, dt
     ctx = ReduceScatter2DContext(max_M=max_M, N=N, rank=rank, world_size=world_size, local_world_size=local_world_size,
                                  dtype=dtype, overlap_with_gemm=overlap_with_gemm, scatter_bufs=scatter_bufs,
                                  rs_per_node_bufs=rs_per_node_bufs, p2p_bufs=p2p_bufs, signal_bufs=signal_bufs,
-                                 sync_buf=sync_buf, stage=1, reduction_stream=reduction_stream, p2p_stream=p2p_stream,
-                                 num_sync_sms=num_sync_sms, num_p2p_sms=num_p2p_sms,
+                                 barrier=BarrierAllContext(True), reduction_stream=reduction_stream,
+                                 p2p_stream=p2p_stream, num_sync_sms=num_sync_sms, num_p2p_sms=num_p2p_sms,
                                  num_reduction_sms=num_reduction_sms)
     return ctx
 
@@ -426,6 +424,102 @@ def reduce_scatter_ring_push_1d_intra_node_sm(
     return output
 
 
+@triton.jit(do_not_specialize=["rank", "num_ranks"])
+def reduce_scatter_ring_push_1d_intra_node_rma_kernel(
+    rank,
+    num_ranks,
+    symm_input_ptr,
+    symm_input_flag_ptr,
+    symm_reduce_ptr,
+    symm_reduce_flag_ptr,
+    grid_barrier_ptr,  # use this to sync many grids
+    output_ptr,
+    elems_per_rank,
+    BLOCK_SIZE: tl.constexpr,
+):
+    """ why this kernel, what's the difference with reduce_scatter_ring_push_1d_intra_node_kernel?
+
+    for some PCI-e machines, we find that NCCL use NIC to communicate cross NUMA nodes. so we follow this design.
+
+    with rma, the kernel is a little different:
+    1. we have to implicit do ADD and save result to buffer. then putmem_rma to remote
+    """
+    to_rank = (rank - 1 + num_ranks) % num_ranks
+    thread_idx = tid(0)
+    pid = tl.program_id(0)
+
+    ITEM_SIZE = tl.constexpr(symm_input_ptr.dtype.primitive_bitwidth) // 8
+    NUMA_WORLD_SIZE = 4
+    use_rma = rank % NUMA_WORLD_SIZE == 0  # TODO(houqi.1993) maybe numa_world_size
+
+    if not use_rma:
+        return reduce_scatter_ring_push_1d_intra_node_kernel(rank, num_ranks, symm_input_ptr, symm_input_flag_ptr,
+                                                             symm_reduce_ptr, symm_reduce_flag_ptr, grid_barrier_ptr,
+                                                             output_ptr, elems_per_rank, BLOCK_SIZE=BLOCK_SIZE)
+
+    for stage in range(num_ranks):
+        segment = (rank + stage + 1) % num_ranks
+        src_ptr = symm_input_ptr + segment * elems_per_rank
+        dst_ptr = symm_reduce_ptr + segment * elems_per_rank
+
+        # wait by many CTA's is OK
+        if thread_idx == 0:
+            while ld(symm_input_flag_ptr + segment, semantic="acquire", scope="gpu") != 1:
+                pass
+        __syncthreads()
+
+        if stage != 0:
+            # wait for reduce ready
+            if thread_idx == 0:
+                while ld(symm_reduce_flag_ptr + segment, semantic="acquire", scope="sys") != 1:
+                    pass
+            __syncthreads()
+
+            add_continuous_kernel(src_ptr, dst_ptr, output_ptr if stage == num_ranks - 1 else dst_ptr, elems_per_rank,
+                                  BLOCK_SIZE)  # directly reduce to output
+            barrier_on_this_grid(grid_barrier_ptr)
+
+        if stage != num_ranks - 1 and pid == 0:
+            # set flag only after all CTAs done memcpy/reduce
+            libshmem_device.putmem_signal_nbi_block(dst_ptr, dst_ptr if stage != 0 else src_ptr,
+                                                    elems_per_rank * ITEM_SIZE, symm_reduce_flag_ptr, 1,
+                                                    libshmem_device.NVSHMEM_SIGNAL_SET, to_rank)
+    if pid == 0:
+        libshmem_device.barrier_all_block()
+
+
+def reduce_scatter_ring_push_1d_intra_node_sm_rma(
+    rank,
+    num_ranks,
+    input_tensor: torch.Tensor,
+    input_flag: torch.Tensor,
+    symm_reduce_tensor: torch.Tensor,
+    symm_reduce_flag: torch.Tensor,
+    grid_barrier: torch.Tensor,
+    output: Optional[torch.Tensor] = None,
+    num_sms=1,
+):
+    M, _ = input_tensor.shape
+    M_per_rank = M // num_ranks
+    output = output if output is not None else torch.empty(
+        (M_per_rank, _), dtype=input_tensor.dtype, device=input_tensor.device)
+    num_warps = 32
+    reduce_scatter_ring_push_1d_intra_node_kernel[(num_sms, )](
+        rank,
+        num_ranks,
+        input_tensor,
+        input_flag,
+        symm_reduce_tensor,
+        symm_reduce_flag,
+        grid_barrier,
+        output,
+        input_tensor.numel() // num_ranks,
+        BLOCK_SIZE=32 * num_warps * 16 // input_tensor.dtype.itemsize,  # each thread copy a uint4
+        num_warps=num_warps,
+    )
+    return output
+
+
 ################### triton kernel ###################
 @triton.jit
 def kernel_inter_node_p2p_for_same_local_rank(offset, local_world_size, M_per_rank, N, input,  # [M, N]
@@ -446,23 +540,6 @@ def kernel_inter_node_p2p_for_same_local_rank(offset, local_world_size, M_per_ra
         input + remote_node_id * nelem_per_rank,
         nelem_per_rank * elem_size,
         remote_rank,
-    )
-
-
-@triton.jit
-def putmem(
-    dst_ptr,
-    src_ptr,
-    nbytes,
-    peer,
-):
-    dst_ptr = tl.cast(dst_ptr, tl.pointer_type(tl.int8))
-    src_ptr = tl.cast(src_ptr, tl.pointer_type(tl.int8))
-    libshmem_device.putmem_block(
-        dst_ptr,
-        src_ptr,
-        nbytes,
-        peer,
     )
 
 
@@ -517,7 +594,7 @@ def reducer_scatter_for_each_node_ring(input: torch.Tensor, stream: torch.cuda.S
                         peer_rank,
                         stream.cuda_stream,
                     )
-                    pynvshmem.nvshmemx_barrier_all_on_stream(stream.cuda_stream)
+                    barrier_all_on_stream(None, stream)
 
     if nnodes == 1:
         return scatter_buf
@@ -583,8 +660,7 @@ def reducer_scatter_for_each_node(input, stream, ctx: ReduceScatter2DContext):
 
             # ring reduce intra node
             rs_buf_cur_node = rs_per_node_buf[M_per_rank * cur_node_id:(cur_node_id + 1) * M_per_rank]
-            barrier_all_on_stream(stream, is_intra_node=True, symm_barrier_buf=ctx.sync_buf,
-                                  local_world_size=local_world_size, barrier_value=ctx.stage)
+            barrier_all_on_stream(ctx.barrier, stream)
             reduction_stream.wait_stream(stream)
             with torch.cuda.stream(reduction_stream):
                 ring_reduce(scatter_bufs_intra_node[local_rank], rs_buf_cur_node, local_rank, local_world_size,
@@ -772,11 +848,12 @@ def reduce_scatter_multi_node(input, stream, ctx: ReduceScatter2DContext):
     M, N = input.shape
     M_per_rank = M // ctx.world_size
     ctx.p2p_stream.wait_stream(stream)
-    if not get_has_nvlink():
+    if not get_has_fullmesh_nvlink():
         rs_result_per_node = reducer_scatter_for_each_node_ring(input, stream, ctx)
     else:
         rs_result_per_node = reducer_scatter_for_each_node(input, stream, ctx)
-    barrier_all_on_stream(stream)
+
+    barrier_all_on_stream(None, stream)
     output = torch.empty((M_per_rank, N), dtype=input.dtype, device=input.device)
     with torch.cuda.stream(stream):
         ring_reduce(rs_result_per_node, output, ctx.node_id, ctx.nnodes)
@@ -792,7 +869,7 @@ def reduce_scatter_2d_op(input, ctx: ReduceScatter2DContext):
 
     current_stream = torch.cuda.current_stream()
     reduction_stream.wait_stream(current_stream)
-    barrier_all_on_stream(current_stream)
+    barrier_all_on_stream(None, current_stream)
 
     output = reduce_scatter_multi_node(input, current_stream, ctx)
     ctx.reset_barriers()
