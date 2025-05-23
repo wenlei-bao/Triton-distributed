@@ -33,6 +33,14 @@ def n_pes():
     ...
 
 
+def team_my_pe(team):
+    ...
+
+
+def team_n_pes(team):
+    ...
+
+
 def int_p(dest, value, pe):
     ...
 
@@ -57,6 +65,18 @@ def barrier_all_warp():
     ...
 
 
+def barrier(team):
+    ...
+
+
+def barrier_block(team):
+    ...
+
+
+def barrier_warp(team):
+    ...
+
+
 def sync_all():
     ...
 
@@ -66,6 +86,14 @@ def sync_all_block():
 
 
 def sync_all_warp():
+    ...
+
+
+def team_sync_block(team):
+    ...
+
+
+def team_sync_warp(team):
     ...
 
 
@@ -205,6 +233,55 @@ def fcollect_warp(team, dest, source, nelems):
 
 def fcollect_block(team, dest, source, nelems):
     ...
+
+
+### putmem_rma_* and putmem_signal_rma_* requires nvshmemi_* APIs. and you have to compile the .bc file yourself with shmem/nvshmem_bind/nvshmemi/build_nvshmemi_bc.sh
+def putmem_rma(dest, source, bytes, pe):
+    ...
+
+
+def putmem_rma_block(dest, source, bytes, pe):
+    ...
+
+
+def putmem_rma_warp(dest, source, bytes, pe):
+    ...
+
+
+def putmem_rma_nbi(dest, source, bytes, pe):
+    ...
+
+
+def putmem_rma_nbi_block(dest, source, bytes, pe):
+    ...
+
+
+def putmem_rma_nbi_warp(dest, source, bytes, pe):
+    ...
+
+
+def putmem_signal_rma(dest, source, bytes, sig_addr, signal, sig_op, pe):
+    pass
+
+
+def putmem_signal_rma_nbi(dest, source, bytes, sig_addr, signal, sig_op, pe):
+    pass
+
+
+def putmem_signal_rma_warp(dest, source, bytes, sig_addr, signal, sig_op, pe):
+    pass
+
+
+def putmem_signal_rma_nbi_warp(dest, source, bytes, sig_addr, signal, sig_op, pe):
+    pass
+
+
+def putmem_signal_rma_block(dest, source, bytes, sig_addr, signal, sig_op, pe):
+    pass
+
+
+def putmem_signal_rma_nbi_block(dest, source, bytes, sig_addr, signal, sig_op, pe):
+    pass
 
 
 # class nvshmemi_cmp_type(Enum):

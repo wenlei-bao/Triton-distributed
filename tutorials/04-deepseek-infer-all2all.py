@@ -56,7 +56,7 @@ At the core of our implementation are low-level primitives that manage the commu
 
     # To run this tutorial
     source ./scripts/sentenv.sh
-    bash ./third_party/distributed/launch.sh ./third_party/distributed/tutorials/04-deepseek-infer-all2all.py
+    bash ./launch.sh ./tutorials/04-deepseek-infer-all2all.py
 
 """
 import os

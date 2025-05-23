@@ -40,9 +40,21 @@ Triton-distributed是基于OpenAI Triton构建的分布式编译器，专为计�
 使用Triton-distributed，开发者可以创建性能媲美优化库（如NVIDIA的[Distributed-GEMM](https://github.com/NVIDIA/cutlass/tree/main/examples/65_distributed_gemm)和字节跳动的[FLUX](https://github.com/bytedance/flux/blob/main/README.md)）的高效Kernel。当前主要支持NVIDIA GPU和AMD GPU，也可移植到其他硬件平台。如需在自定义硬件上使用，请联系我们。
 
 ## 快速入门
-### 源码安装
+### 安装 Triton-distributed
 
-[安装指导](docs/build.md)
+#### 方法 1. 源码安装
+
+请看[文档](docs/build.md).
+
+#### 方法 2. 用pip安装
+
+首先，需要准备好NVSHMEM，并手动修改NVSHMEM的bug (由于NVSHMEM的许可证限制，我们无法预先为用户做这件事，必须由用户手动完成). 请看[文档](docs/prepare_nvshmem.md).
+
+然后, pip安装.
+```sh
+export NVSHMEM_SRC=/path/to/nvshmem
+pip install "git+https://github.com/ByteDance-Seed/Triton-distributed.git#subdirectory=python" --no-build-isolation --force-reinstall
+```
 
 ### 如何使用 Triton-distributed
 Triton-distributed 提供了一套易于使用的原语，用于支持开发计算-通信融合的分布式kernel。这些原语分为低层次原语和高层次原语。目前，我们已经发布了低层次原语，并计划在未来发布高层次原语。

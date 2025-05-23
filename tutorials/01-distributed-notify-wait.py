@@ -42,7 +42,7 @@ In doing so, you will learn about:
 
     # To run this tutorial
     source ./scripts/sentenv.sh
-    bash ./third_party/distributed/launch.sh ./third_party/distributed/tutorials/01-distributed-notify-wait.py
+    bash ./launch.sh ./tutorials/01-distributed-notify-wait.py
 
 """
 

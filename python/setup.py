@@ -30,11 +30,11 @@ from wheel.bdist_wheel import bdist_wheel
 
 import pybind11
 
-from build_helpers import get_base_dir, get_cmake_dir, copy_apply_patches
+from build_helpers import create_symlink_rel, get_base_dir, get_cmake_dir, softlink_apply_patches
 
 from torch.utils.cpp_extension import BuildExtension as TorchBuildExtension
 
-copy_apply_patches()
+softlink_apply_patches()
 
 
 @dataclass
@@ -277,7 +277,8 @@ def update_symlink(link_path, source_path):
 
     print(f"creating symlink: {link_path} -> {source_path}", file=sys.stderr)
     link_path.absolute().parent.mkdir(parents=True, exist_ok=True)  # Ensure link's parent directory exists
-    link_path.symlink_to(source_path, target_is_directory=True)
+    base_dir = Path(__file__).parent.parent
+    create_symlink_rel(source_path, link_path, base_dir)
 
 
 def get_thirdparty_packages(packages: list):
@@ -409,6 +410,7 @@ class CMakeExtension(Extension):
 def build_nvshmem(cap):
     nvshmem_bind_dir = os.path.join(get_base_dir(), "shmem", "nvshmem_bind")
     nvshmem_dir = os.path.join(get_base_dir(), "3rdparty", "nvshmem")
+    nvshmem_dir = os.getenv("NVSHMEM_SRC", nvshmem_dir)
     if not os.path.exists(nvshmem_dir) or len(os.listdir(nvshmem_dir)) == 0:
         # for github version: download_nvshmem()
         # subprocess.check_call(["git", "submodule", "update", "--init", "--recursive"])
@@ -613,8 +615,9 @@ class CMakeBuild(TorchBuildExtension):
                 if torch.cuda.is_available():
                     if torch.version.hip is None:
                         cmake_args += ["-DTRITON_BUILD_PYNVSHMEM=ON"]
-                        nvshmem_dir = os.path.join(get_base_dir(), "3rdparty", "nvshmem", "build", "install")
-                        env["NVSHMEM_DIR"] = nvshmem_dir
+                        nvshmem_dir = os.path.join(get_base_dir(), "3rdparty", "nvshmem")
+                        nvshmem_dir = os.getenv("NVSHMEM_SRC", nvshmem_dir)
+                        env["NVSHMEM_DIR"] = os.path.join(nvshmem_dir, "build", "install")
             except Exception:
                 print("Cannot import torch.")
                 pass
@@ -866,8 +869,8 @@ def get_packages():
         packages += ["triton/profiler"]
     if check_env_flag("TRITON_BUILD_DISTRIBUTED", "ON"):  # Default ON
         packages += [
-            "triton_dist/_C", "triton_dist/kernels", "triton_dist/kernels/nvidia", "triton_dist/kernels/amd",
-            "triton_dist/layers/nvidia", "triton_dist/tools", "triton_dist/test"
+            "triton_dist", "triton_dist/_C", "triton_dist/kernels", "triton_dist/kernels/nvidia",
+            "triton_dist/kernels/amd", "triton_dist/layers/nvidia", "triton_dist/tools", "triton_dist/test"
         ]
         try:
             import torch

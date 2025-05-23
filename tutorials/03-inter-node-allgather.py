@@ -31,7 +31,7 @@ In this tutorial, you will write a low latency all gather kernel using using Tri
 
     # To run this tutorial
     source ./scripts/sentenv.sh
-    bash ./third_party/distributed/launch.sh ./third_party/distributed/tutorials/03-inter-node-allgather.py
+    bash ./launch.sh ./tutorials/03-inter-node-allgather.py
 
 """
 import datetime

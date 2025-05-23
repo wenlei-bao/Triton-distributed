@@ -36,10 +36,11 @@ In doing so, you will learn about:
 
     # To run this tutorial
     source ./scripts/sentenv.sh
-    bash ./third_party/distributed/launch.sh ./third_party/distributed/tutorials/07-overlapping-allgather-gemm.py
+    bash ./launch.sh ./tutorials/07-overlapping-allgather-gemm.py
 
 """
 
+import os
 import torch
 from triton_dist import pynvshmem
 from typing import Optional
@@ -48,7 +49,7 @@ from triton_dist.kernels.nvidia.common_ops import wait_eq, set_signal
 from cuda import cudart
 
 import triton
-from triton_dist.kernels.nvidia.allgather_gemm import create_ag_gemm_inter_node_context
+from triton_dist.kernels.nvidia.allgather_gemm import create_ag_gemm_context
 import triton.language as tl
 import triton_dist.language as dl
 from triton.language.extra import libshmem_device
@@ -321,9 +322,9 @@ def cp_engine_producer_all_gather_put(local_tensor, ag_buffer, signal_buffer, M_
 # Now we combine all the kernels here.
 
 
-def ag_gemm_inter_node_persistent_op(a, b, c, rank, num_ranks, workspace_tensors, barrier_tensors, comm_buf,
-                                     ag_stream=None, internode_ag_stream=None, gemm_stream=None, BLOCK_M=128,
-                                     BLOCK_N=256, BLOCK_K=64, stages=3, local_world_size=8, signal_target=1):
+def ag_gemm_persistent_op(a, b, c, rank, num_ranks, workspace_tensors, barrier_tensors, comm_buf, ag_stream=None,
+                          internode_ag_stream=None, gemm_stream=None, BLOCK_M=128, BLOCK_N=256, BLOCK_K=64, stages=3,
+                          local_world_size=8, signal_target=1):
     assert a.shape[1] == b.shape[1], "Incompatible dimensions"
     assert a.dtype == b.dtype, "Incompatible dtypes"
 
@@ -398,15 +399,21 @@ def torch_ag_gemm(
 
 
 if __name__ == "__main__":
-    TP_GROUP = initialize_distributed()
-    rank = TP_GROUP.rank()
-    world_size = TP_GROUP.size()
-    LOCAL_WORLD_SIZE = 8
+    WORLD_SIZE = int(os.getenv("WORLD_SIZE", "-1"))
+    LOCAL_WORLD_SIZE = int(os.getenv("LOCAL_WORLD_SIZE", "-1"))
 
-    if torch.cuda.get_device_capability()[0] <= 9:
+    if WORLD_SIZE == LOCAL_WORLD_SIZE:
+        print("Skip the test because this should be performed with 2 nodes or higher")
+        import sys
+        sys.exit()
+
+    if torch.cuda.get_device_capability()[0] < 9:
         print("Skip the test because the device is not sm90 or higher")
         import sys
         sys.exit()
+
+    TP_GROUP = initialize_distributed()
+    rank = TP_GROUP.rank()
 
     M = 8192
     N = 49152
@@ -414,10 +421,10 @@ if __name__ == "__main__":
     config = {"BM": 128, "BN": 256, "BK": 64, "stage": 3}
     dtype = torch.float16
 
-    assert M % world_size == 0
-    assert N % world_size == 0
-    M_per_rank = M // world_size
-    N_per_rank = N // world_size
+    assert M % WORLD_SIZE == 0
+    assert N % WORLD_SIZE == 0
+    M_per_rank = M // WORLD_SIZE
+    N_per_rank = N // WORLD_SIZE
 
     A = torch.randn([M_per_rank, K], dtype=dtype, device="cuda")
     B = torch.randn([N_per_rank, K], dtype=dtype, device="cuda")
@@ -430,19 +437,18 @@ if __name__ == "__main__":
     # In practice, the following parts are encapsulated in ag_gemm_inter_node() of triton_dist.kernels.nvidia.allgather_gemm.py
 
     C = torch.empty([M, N_per_rank], dtype=dtype, device="cuda")
-    ctx = create_ag_gemm_inter_node_context(A, B, rank, world_size, max_M=M, BLOCK_M=config["BM"], BLOCK_N=config["BN"],
-                                            BLOCK_K=config["BK"], stages=config["stage"], ag_stream=torch.cuda.Stream(),
-                                            gemm_stream=torch.cuda.Stream())
-    ctx.barrier_tensors[ctx.local_rank].fill_(0)
+    ctx = create_ag_gemm_context(A, B, rank, WORLD_SIZE, max_M=M, BLOCK_M=config["BM"], BLOCK_N=config["BN"],
+                                 BLOCK_K=config["BK"], stages=config["stage"])
+    ctx.barrier_tensor.fill_(0)
     pynvshmem.nvshmemx_barrier_all_on_stream(torch.cuda.current_stream().cuda_stream)
     # copy local data to the ctx
-    ctx.workspace_tensors[ctx.local_rank][rank * M_per_rank:(rank + 1) * M_per_rank, :].copy_(A)
-    set_signal(ctx.barrier_tensors[ctx.local_rank][rank].data_ptr(), 1, torch.cuda.current_stream(), True)
+    ctx.workspace_tensor[rank * M_per_rank:(rank + 1) * M_per_rank, :].copy_(A)
+    set_signal(ctx.barrier_tensor[rank].data_ptr(), 1, torch.cuda.current_stream(), True)
 
     # launch the ag_gemm kernel
-    ag_gemm_inter_node_persistent_op(A, B, C, ctx.rank, ctx.num_ranks, ctx.workspace_tensors, ctx.barrier_tensors,
-                                     ctx.comm_buf, ag_stream=ctx.ag_stream, internode_ag_stream=ctx.internode_ag_stream,
-                                     gemm_stream=ctx.gemm_stream, local_world_size=LOCAL_WORLD_SIZE, signal_target=1)
+    ag_gemm_persistent_op(A, B, C, ctx.rank, ctx.num_ranks, ctx.workspace_tensors, ctx.barrier_tensors, ctx.comm_buf,
+                          ag_stream=ctx.ag_intranode_stream, internode_ag_stream=ctx.ag_internode_stream,
+                          gemm_stream=ctx.gemm_stream, local_world_size=LOCAL_WORLD_SIZE, signal_target=1)
 
     assert torch.allclose(golden, C, atol=1e-3, rtol=1e-3)
     print("Pass!")
