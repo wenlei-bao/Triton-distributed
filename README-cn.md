@@ -33,7 +33,7 @@
     <img src="https://img.shields.io/badge/License-MIT-blue"></a>
 </p> -->
 
-[原始Triton README](upstream-README.md) | [英文README](README.md)
+[原始Triton README](https://github.com/triton-lang/triton/blob/main/README.md) | [英文README](README.md)
 
 Triton-distributed是基于OpenAI Triton构建的分布式编译器，专为计算-通信重叠优化设计。
 
@@ -59,7 +59,7 @@ docker exec -it triton-dist /bin/bash
 这之后，安装clang-19
 ```sh
 apt update
-apt upgrade apt install clang-19 llvm-19 libclang-19-dev
+apt install clang-19 llvm-19 libclang-19-dev
 ```
 
 最后, pip安装.
@@ -163,7 +163,7 @@ def all_to_all_kernel(
         )
 ```
 
-此外，用户可以将通信部分与计算部分结合，设计计算-通信融合的kernel。我们在`third_party/distributed/distributed/kernels`目录下提供了示例实现。
+此外，用户可以将通信部分与计算部分结合，设计计算-通信融合的kernel。我们在`python/triton_dist/kernels`目录下提供了示例实现。
 
 ## Performance
 Triton-distributed 可以达到和手写分布式算子库接近的性能，有时候还能更好。
@@ -191,7 +191,7 @@ Triton-distributed 可以达到和手写分布式算子库接近的性能，有�
 ### 功能
 - [x] Release low-level primitives
 - [ ] Release high-level primitives
-- [ ] Tutorials
+- [x] Tutorials
 - [ ] Pre-built binary
 ### Kernels
 - [x] Release single-node GEMM TP overlapping kernels
@@ -202,7 +202,7 @@ Triton-distributed 可以达到和手写分布式算子库接近的性能，有�
 - [x] Release cross-node MoE TP overlapping kernels
 - [x] Release cross-node distributed Flash-Decoding kernels
 - [x] Release cross-node EP all-to-all kernels (similar to [DeepEP](https://github.com/deepseek-ai/DeepEP))
-- [ ] Provide tutorials for kernel implementation
+- [x] Provide tutorials for kernel implementation
 ### 后端
 计算能力
 - [x] Nvidia SM90a support
@@ -213,25 +213,28 @@ Triton-distributed 可以达到和手写分布式算子库接近的性能，有�
 通信能力
 - [x] NVLink
 - [x] IB
-- [ ] PCIe 
+- [x] PCIe 
 
 ### 性能
-- [ ] Performance report
+- [x] Performance report
 
 ## 许可协议
 Triton-distributed 主体是 MIT license.
 我们的代码中有一些是 Apache-2.0 License的:
-- `third_party/distributed/distributed/kernels/flash_decode.py`
-
-Triton原本又些代码也是 Apache-2.0 License的:
-- `include/triton/Dialect/TritonGPU/Transforms/PipelineExpander.h`
-- `lib/Dialect/TritonGPU/Transforms/Pipeliner/PipelineExpander.cpp`
-- `python/triton/_C/include/triton/Dialect/TritonGPU/Transforms/PipelineExpander.h`
-- `utils/generate-test-checks.py`
+- `python/triton_dist/kernels/flash_decode.py`
 
 ## 引用
 如在学术研究中使用Triton-distributed，请引用：
 ```bibtex
+@misc{zheng2025tritondistributed,
+      title={Triton-distributed: Programming Overlapping Kernels on Distributed AI Systems with the Triton Compiler}, 
+      author={Size Zheng and Wenlei Bao and Qi Hou and Xuegui Zheng and Jin Fang and Chenhui Huang and Tianqi Li and Haojie Duanmu and Renze Chen and Ruifan Xu and Yifan Guo and Ningxin Zheng and Ziheng Jiang and Xinyi Di and Dongyang Wang and Jianxi Ye and Haibin Lin and Li-Wen Chang and Liqiang Lu and Yun Liang and Jidong Zhai and Xin Liu},
+      year={2025},
+      eprint={2504.19442},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC},
+      url={https://arxiv.org/abs/2504.19442}, 
+}
 @inproceedings{zheng2025tilelink,
       author = {Size Zheng and Jin Fang and Xuegui Zheng and Qi Hou and Wenlei Bao and Ningxin Zheng and Ziheng Jiang and Dongyang Wang and Jianxi Ye and Haibin Lin and Li-Wen Chang and Xin Liu},
       booktitle = {Proceedings of Machine Learning and Systems},
