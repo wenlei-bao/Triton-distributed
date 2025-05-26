@@ -33,7 +33,7 @@
     <img src="https://img.shields.io/badge/License-MIT-blue"></a>
 </p> -->
 
-[Original Triton README](upstream-README.md) | [README in Chinese](README-cn.md)
+[Original Triton README](https://github.com/triton-lang/triton/blob/main/README.md) | [README in Chinese](README-cn.md)
 
 Triton-distributed is a distributed compiler designed for computation-communication overlapping, which is based on OpenAI Triton.
 
@@ -62,7 +62,7 @@ Then, please download and fix NVSHMEM manually (as we cannot do this for you due
 After that, install clang-19
 ```sh
 apt update
-apt upgrade apt install clang-19 llvm-19 libclang-19-dev
+apt install clang-19 llvm-19 libclang-19-dev
 ```
 
 Then, pip install triton-dist.
@@ -167,7 +167,7 @@ def all_to_all_kernel(
         )
 ```
 
-Also, users can combine the communication part with computation part to design overlapping kernels. We have provided example implementations in `third_party/distributed/distributed/kernels`.
+Also, users can combine the communication part with computation part to design overlapping kernels. We have provided example implementations in `python/triton_dist/kernels`.
 
 ## Performance
 Triton-distributed can achieve comparable or better performance than hand-tuned libraries.
@@ -226,18 +226,22 @@ Communication
 ## License
 The Triton-distributed project is under MIT license.
 Part of our code is under Apache-2.0 License:
-- `third_party/distributed/distributed/kernels/flash_decode.py`
-
-Triton's original code is partially under Apache-2.0 License, these files include:
-- `include/triton/Dialect/TritonGPU/Transforms/PipelineExpander.h`
-- `lib/Dialect/TritonGPU/Transforms/Pipeliner/PipelineExpander.cpp`
-- `python/triton/_C/include/triton/Dialect/TritonGPU/Transforms/PipelineExpander.h`
-- `utils/generate-test-checks.py`
+- `python/triton_dist/kernels/flash_decode.py`
 
 
 ## Citation
 If you use Triton-distributed in a scientific publication, we encourage you to add the following reference to the related papers:
 ```bibtex
+@misc{zheng2025tritondistributed,
+      title={Triton-distributed: Programming Overlapping Kernels on Distributed AI Systems with the Triton Compiler}, 
+      author={Size Zheng and Wenlei Bao and Qi Hou and Xuegui Zheng and Jin Fang and Chenhui Huang and Tianqi Li and Haojie Duanmu and Renze Chen and Ruifan Xu and Yifan Guo and Ningxin Zheng and Ziheng Jiang and Xinyi Di and Dongyang Wang and Jianxi Ye and Haibin Lin and Li-Wen Chang and Liqiang Lu and Yun Liang and Jidong Zhai and Xin Liu},
+      year={2025},
+      eprint={2504.19442},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC},
+      url={https://arxiv.org/abs/2504.19442}, 
+}
+
 @inproceedings{zheng2025tilelink,
       author = {Size Zheng and Jin Fang and Xuegui Zheng and Qi Hou and Wenlei Bao and Ningxin Zheng and Ziheng Jiang and Dongyang Wang and Jianxi Ye and Haibin Lin and Li-Wen Chang and Xin Liu},
       booktitle = {Proceedings of Machine Learning and Systems},
