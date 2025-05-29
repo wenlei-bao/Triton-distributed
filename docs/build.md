@@ -137,7 +137,7 @@ git submodule update --init --recursive
 sudo apt-get update -y
 sudo apt install -y libopenmpi-dev
 pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm6.3 --no-deps
-./third_party/rocshmem_bind/build.sh
+bash ./shmem/rocshmem_bind/build.sh
 python3 -m pip install -i https://test.pypi.org/simple hip-python>=6.3.0 # (or whatever Rocm version you have)
 pip3 install pybind11
 ```
