@@ -61,7 +61,11 @@ if [ ${NVSHMEM_BUILD_BITCODE_LIBRARY} -eq "1" ]; then
   mkdir -p src/llvm_lib
 fi
 CMAKE=${CMAKE:-cmake} # default cmake version maybe <= 3.19
-if [ ! -f CMakeCache.txt ]; then
+if [[ -f CMakeCache.txt && -d "${NVSHMEM_SRC}/build/install" ]]; then
+    echo "NVSHMEM has been built previously. Skip build now. If you want to re-build it, please remove ${NVSHMEM_SRC}/build."
+else
+    rm -f CMakeCache.txt
+    rm -rf CMakeFiles
     ${CMAKE} .. \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
         ${CUDAARCH_ARGS} \

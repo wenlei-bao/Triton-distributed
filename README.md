@@ -67,10 +67,15 @@ apt install clang-19 llvm-19 libclang-19-dev
 
 Then, pip install triton-dist.
 ```sh
-export NVSHMEM_SRC=/workspace/nvshmem
+export NVSHMEM_SRC=/workspace/nvshmem_src
+# Not recommend to use g++
 export CC=clang-19
-export CXX=clang-19++
-pip install "git+https://github.com/ByteDance-Seed/Triton-distributed.git#subdirectory=python" --no-build-isolation --force-reinstall
+export CXX=clang++-19
+# Remove triton installed with torch
+pip uninstall triton
+rm -rf /usr/local/lib/python3.12/dist-packages/triton
+# Install Triton-distributed
+pip install "git+https://github.com/ByteDance-Seed/Triton-distributed.git#subdirectory=python" --no-build-isolation --verbose --force-reinstall
 ```
 
 ### How to use Triton-distributed
