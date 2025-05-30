@@ -71,7 +71,6 @@ function move_libnvshmem_device_bc() {
 set_arch
 set_nvcc_gencode
 
-export NVSHMEM_DIR=${PROJECT_ROOT}/3rdparty/nvshmem/build/install
 bash -x ${PROJECT_ROOT}/build_nvshmem.sh ${build_args}
 
 move_libnvshmem_device_bc
