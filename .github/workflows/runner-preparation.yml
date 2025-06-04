@@ -1,0 +1,34 @@
+name: Runner Preparation
+
+on:
+  workflow_call:
+    outputs:
+      matrix-AMD:
+        value: ${{ jobs.prepare.outputs.matrix-AMD }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix-AMD: ${{ steps.set-matrix.outputs.matrix-AMD }}
+    steps:
+      - name: Decide pre-submit integration test enablement
+        # Always enable integration tests for pre-submit pull requests.
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "enable_integration=true" >> $GITHUB_ENV
+      - name: Decide manual trigger integration test enablement
+        # Always enable integration tests when manually triggered
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "enable_integration=true" >> $GITHUB_ENV
+      - name: Decide post-submit integration test enablement
+        # Always enable integration tests for post-submit pull.
+        if: github.event_name == 'push'
+        run: |
+          echo "enable_integration=true" >> $GITHUB_ENV
+      - name: Prepare runner matrix
+        id: set-matrix
+        if: env.enable_integration == 'true'
+        run: |
+          echo '::set-output name=matrix-AMD::[["self-hosted", "gfx90a"], ["amd-gfx942"]]'
